@@ -3,7 +3,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import talib
+import pandas_ta as ta
 import schedule
 import time
 import datetime
@@ -87,19 +87,19 @@ def fetch_data(tickers, start_date, end_date, max_retries=3, delay=2):
                 ticker = yf.Ticker(asset["symbol"])
                 hist = ticker.history(start=start_date, end=end_date)
                 if not hist.empty and len(hist) >= 26:  # Minimum for MACD
-                    # Technical indicators using talib
-                    sma50 = talib.SMA(hist["Close"], timeperiod=50).iloc[-1] if len(hist) >= 50 else None
-                    sma200 = talib.SMA(hist["Close"], timeperiod=200).iloc[-1] if len(hist) >= 200 else None
-                    rsi = talib.RSI(hist["Close"], timeperiod=14).iloc[-1] if len(hist) >= 14 else None
-                    macd, _, _ = talib.MACD(hist["Close"], fastperiod=12, slowperiod=26, signalperiod=9)
-                    macd = macd.iloc[-1] if len(hist) >= 26 and not np.isnan(macd.iloc[-1]) else None
-                    bb_high, _, bb_low = talib.BBANDS(hist["Close"], timeperiod=20)
-                    bb_high = bb_high.iloc[-1] if len(hist) >= 20 and not np.isnan(bb_high.iloc[-1]) else None
-                    bb_low = bb_low.iloc[-1] if len(hist) >= 20 and not np.isnan(bb_low.iloc[-1]) else None
-                    adx = talib.ADX(hist["High"], hist["Low"], hist["Close"], timeperiod=14).iloc[-1] if len(hist) >= 14 and not np.isnan(talib.ADX(hist["High"], hist["Low"], hist["Close"], timeperiod=14).iloc[-1]) else None
-                    momentum = talib.MOM(hist["Close"], timeperiod=10).iloc[-1] if len(hist) >= 10 else None
-                    slowk, _ = talib.STOCH(hist["High"], hist["Low"], hist["Close"], fastk_period=14, slowk_period=3, slowd_period=3)
-                    slowk = slowk.iloc[-1] if len(hist) >= 14 and not np.isnan(slowk.iloc[-1]) else None
+                    # Technical indicators using pandas_ta
+                    sma50 = ta.sma(hist["Close"], length=50).iloc[-1] if len(hist) >= 50 else None
+                    sma200 = ta.sma(hist["Close"], length=200).iloc[-1] if len(hist) >= 200 else None
+                    rsi = ta.rsi(hist["Close"], length=14).iloc[-1] if len(hist) >= 14 else None
+                    macd = ta.macd(hist["Close"], fast=12, slow=26, signal=9)
+                    macd = macd["MACD_12_26_9"].iloc[-1] if len(hist) >= 26 and not np.isnan(macd["MACD_12_26_9"].iloc[-1]) else None
+                    bb = ta.bbands(hist["Close"], length=20)
+                    bb_high = bb["BBU_20_2.0"].iloc[-1] if len(hist) >= 20 and not np.isnan(bb["BBU_20_2.0"].iloc[-1]) else None
+                    bb_low = bb["BBL_20_2.0"].iloc[-1] if len(hist) >= 20 and not np.isnan(bb["BBL_20_2.0"].iloc[-1]) else None
+                    adx = ta.adx(hist["High"], hist["Low"], hist["Close"], length=14).iloc[-1]["ADX_14"] if len(hist) >= 14 and not np.isnan(ta.adx(hist["High"], hist["Low"], hist["Close"], length=14).iloc[-1]["ADX_14"]) else None
+                    momentum = ta.mom(hist["Close"], length=10).iloc[-1] if len(hist) >= 10 else None
+                    stoch = ta.stoch(high=hist["High"], low=hist["Low"], close=hist["Close"], k=14, d=3, smooth_k=3)
+                    slowk = stoch["STOCHk_14_3_3"].iloc[-1] if len(hist) >= 14 and not np.isnan(stoch["STOCHk_14_3_3"].iloc[-1]) else None
                     vol_5d = hist["Volume"].rolling(window=5).mean().iloc[-1] if len(hist) >= 5 else None
                     vol_50d = hist["Volume"].rolling(window=50).mean().iloc[-1] if len(hist) >= 50 else None
                     # Futures data (simplified)
