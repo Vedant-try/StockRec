@@ -8,4 +8,4 @@ yfinance
 matplotlib
 streamlit
 openpyxl
-TA-Lib
+pandas_ta==0.3.14b0
