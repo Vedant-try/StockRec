@@ -1,1 +1,7 @@
-streamlit==1.39.0 yfinance==0.2.65 pandas==2.2.3 numpy==1.26.4 matplotlib==3.9.2 schedule==1.2.2 TA-Lib==0.4.33
+streamlit==1.39.0 
+yfinance==0.2.65 
+pandas==2.2.3 
+numpy==1.26.4 
+matplotlib==3.9.2 
+schedule==1.2.2 
+TA-Lib==0.4.33
