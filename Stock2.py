@@ -3,21 +3,24 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
-import random
 import talib
-import time
-import os
 import schedule
+import time
+import datetime
+import random
+import os
 import threading
 import json
 import logging
 
-# Configure logging
-logging.basicConfig(filename='stock_analysis.log', level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging configuration
+logging.basicConfig(
+    filename='stock_analysis.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
-# Predefined list of F&O-eligible stocks
+# Complete list of 50 NSE F&O stocks (replaced ETERNAL.NS with TATAMOTORS.NS)
 ASSETS = [
     {"name": "Reliance Industries Ltd.", "symbol": "RELIANCE.NS"},
     {"name": "HDFC Bank Ltd.", "symbol": "HDFCBANK.NS"},
@@ -68,14 +71,14 @@ ASSETS = [
     {"name": "Indian Railway Finance Corporation Ltd.", "symbol": "IRFC.NS"},
     {"name": "Vedanta Ltd.", "symbol": "VEDL.NS"},
     {"name": "Varun Beverages Ltd.", "symbol": "VBL.NS"},
-    {"name": "Eternal Limited", "symbol": "ETERNAL.NS"},
+    {"name": "Tech Mahindra Ltd.", "symbol": "TECHM.NS"}
 ]
 
 FNO_ASSETS = [asset for asset in ASSETS]
 
-# Function to fetch stock and futures data with delay
+# Fetch stock and futures data with delay
 @st.cache_data
-def fetch_data(tickers, start_date, end_date, max_retries=3, delay=1):
+def fetch_data(tickers, start_date, end_date, max_retries=3, delay=2):
     data = {}
     failed_tickers = []
     for asset in tickers:
@@ -161,7 +164,7 @@ def score_stock(data, action="buy"):
             if info["sma50"] and info["sma200"] and info["sma50"] > info["sma200"]: score += 2
             if info["macd"] and info["macd"] > 0: score += 2
             if info["current_price"] and info["bb_low"] and info["current_price"] < info["bb_low"]: score += 2
-            if info["adx"] and info["adx"] > 25 and info["1m_return"] > 0: score += 2
+            if info["adx"] and info["adx"] > 25 and info["1m_return"] and info["1m_return"] > 0: score += 2
             if info["momentum"] and info["momentum"] > 0: score += 1
             if info["slowk"] and info["slowk"] < 20: score += 1
             if info["vol_5d"] and info["vol_50d"] and info["vol_5d"] > 1.5 * info["vol_50d"]: score += 1
@@ -179,7 +182,7 @@ def score_stock(data, action="buy"):
             if info["sma50"] and info["sma200"] and info["sma50"] < info["sma200"]: score += 2
             if info["macd"] and info["macd"] < 0: score += 2
             if info["current_price"] and info["bb_high"] and info["current_price"] > info["bb_high"]: score += 2
-            if info["adx"] and info["adx"] > 25 and info["1m_return"] < 0: score += 2
+            if info["adx"] and info["adx"] > 25 and info["1m_return"] and info["1m_return"] < 0: score += 2
             if info["momentum"] and info["momentum"] < 0: score += 1
             if info["slowk"] and info["slowk"] > 80: score += 1
             if info["vol_5d"] and info["vol_50d"] and info["vol_5d"] < 0.5 * info["vol_50d"]: score += 1
@@ -215,11 +218,11 @@ def update_portfolio(portfolio, asset_name, amount, price, date, action="buy"):
 # Nightly analysis function
 def nightly_analysis():
     logging.info("Starting nightly analysis")
-    end_date = datetime.today()
-    start_date = end_date - timedelta(days=30)
+    end_date = datetime.datetime.today()
+    start_date = end_date - datetime.timedelta(days=30)
     daily_data = fetch_data(FNO_ASSETS, start_date, end_date)
     if not daily_data:
-        st.error("No data fetched for any stocks. Check internet connection or ticker validity (e.g., ETERNAL.NS).")
+        st.error("No data fetched for any stocks. Check internet connection or ticker validity.")
         logging.error("No data fetched for any stocks")
         return
     df = pd.DataFrame({
@@ -239,19 +242,19 @@ def nightly_analysis():
         "Profit Margin (%)": [round(daily_data[name]["profit_margin"] * 100, 2) if daily_data[name]["profit_margin"] else "N/A" for name in daily_data],
         "Dividend Yield (%)": [round(daily_data[name]["dividend_yield"] * 100, 2) if daily_data[name]["dividend_yield"] else "N/A" for name in daily_data],
         "OI Change (%)": [round(daily_data[name]["oi_change"], 2) if daily_data[name]["oi_change"] else "N/A" for name in daily_data],
-        "Analysis Date": datetime.today().strftime("%Y-%m-%d")
+        "Analysis Date": datetime.datetime.today().strftime("%Y-%m-%d")
     })
     df.to_csv("daily_analysis.csv", index=False)
-    logging.info("Saved daily_analysis.csv with {} stocks".format(len(daily_data)))
+    logging.info(f"Saved daily_analysis.csv with {len(daily_data)} stocks")
     
-    # Weekly recommendations (generated on Friday)
-    if datetime.today().weekday() == 4:  # Friday
+    # Weekly recommendations (generated on Fridays)
+    if datetime.datetime.today().weekday() == 4:  # Friday
         buy_scores = score_stock(daily_data, action="buy")
         sell_scores = score_stock(daily_data, action="sell")
         buy_stock = max(buy_scores, key=buy_scores.get, default=None) if buy_scores else None
         sell_stock = max(sell_scores, key=sell_scores.get, default=None) if sell_scores else None
         recommendation = {
-            "date": datetime.today().strftime("%Y-%m-%d"),
+            "date": datetime.datetime.today().strftime("%Y-%m-%d"),
             "buy": {
                 "stock": buy_stock,
                 "score": buy_scores.get(buy_stock, 0) if buy_stock else 0,
@@ -280,16 +283,19 @@ def nightly_analysis():
             }
         }
         with open("weekly_recommendations.json", "w") as f:
-            json.dump(recommendation, f)
-        logging.info("Generated weekly_recommendations.json")
+            json.dump(recommendation, f, indent=4)
+        logging.info(f"Generated weekly_recommendations.json for {recommendation['date']}")
 
 # Schedule nightly analysis
-try:
-    schedule.every().day.at("02:00").do(nightly_analysis)
-    logging.info("Scheduled nightly analysis at 2 AM IST")
-except Exception as e:
-    st.warning(f"Scheduling failed: {e}. Use the 'Run Manual Analysis' button below.")
-    logging.error(f"Scheduling failed: {e}")
+if os.getenv("RUN_NIGHTLY") == "true":
+    nightly_analysis()
+else:
+    try:
+        schedule.every().day.at("02:00").do(nightly_analysis)
+        logging.info("Scheduled nightly analysis at 2 AM IST")
+    except Exception as e:
+        st.warning(f"Scheduling failed: {e}. Use the 'Run Manual Analysis' button below.")
+        logging.error(f"Scheduling failed: {e}")
 
 # Run scheduler in background
 def run_scheduler():
@@ -328,9 +334,10 @@ sold_price = st.sidebar.number_input("Sold Price per Share (₹)", min_value=0.0
 if st.sidebar.button("Log Sold Stock"):
     if sold_ticker and sold_amount > 0 and sold_price > 0:
         st.session_state.portfolio = update_portfolio(
-            st.session_state.portfolio, sold_ticker, sold_amount, sold_price, datetime.today(), action="sell"
+            st.session_state.portfolio, sold_ticker, sold_amount, sold_price, datetime.datetime.today(), action="sell"
         )
         st.success(f"Logged sale of {sold_ticker} for ₹{sold_amount} at ₹{sold_price}/share.")
+        logging.info(f"Logged sale of {sold_ticker} for ₹{sold_amount} at ₹{sold_price}/share")
 
 # Load daily analysis from CSV if available
 daily_data = {}
@@ -341,11 +348,11 @@ if os.path.exists("daily_analysis.csv"):
             st.warning("The daily_analysis.csv file is empty or invalid. Running fresh analysis...")
             logging.warning("daily_analysis.csv is empty or invalid, running fresh analysis")
             with st.spinner("Fetching market data for 50 stocks..."):
-                end_date = datetime.today()
-                start_date = end_date - timedelta(days=30)
+                end_date = datetime.datetime.today()
+                start_date = end_date - datetime.timedelta(days=30)
                 daily_data = fetch_data(FNO_ASSETS, start_date, end_date)
                 if not daily_data:
-                    st.error("No data fetched. Check internet connection or ticker validity (e.g., ETERNAL.NS).")
+                    st.error("No data fetched. Check internet connection or ticker validity.")
                     logging.error("No data fetched during fresh analysis")
                 else:
                     df = pd.DataFrame({
@@ -365,11 +372,11 @@ if os.path.exists("daily_analysis.csv"):
                         "Profit Margin (%)": [round(daily_data[name]["profit_margin"] * 100, 2) if daily_data[name]["profit_margin"] else "N/A" for name in daily_data],
                         "Dividend Yield (%)": [round(daily_data[name]["dividend_yield"] * 100, 2) if daily_data[name]["dividend_yield"] else "N/A" for name in daily_data],
                         "OI Change (%)": [round(daily_data[name]["oi_change"], 2) if daily_data[name]["oi_change"] else "N/A" for name in daily_data],
-                        "Analysis Date": datetime.today().strftime("%Y-%m-%d")
+                        "Analysis Date": datetime.datetime.today().strftime("%Y-%m-%d")
                     })
                     df.to_csv("daily_analysis.csv", index=False)
-                    logging.info("Generated new daily_analysis.csv with {} stocks".format(len(daily_data)))
-                    st.subheader(f"Daily Analysis (All 50 F&O Stocks, Processed on {datetime.today().strftime('%Y-%m-%d')})")
+                    logging.info(f"Generated new daily_analysis.csv with {len(daily_data)} stocks")
+                    st.subheader(f"Daily Analysis (All 50 F&O Stocks, Processed on {datetime.datetime.today().strftime('%Y-%m-%d')})")
                     st.dataframe(df)
                     st.session_state.weekly_data.update(daily_data)
         else:
@@ -377,20 +384,20 @@ if os.path.exists("daily_analysis.csv"):
             st.subheader(f"Daily Analysis (All 50 F&O Stocks, Processed on {analysis_date})")
             st.dataframe(df)
             # Refresh daily_data for consistency
-            end_date = datetime.today()
-            start_date = end_date - timedelta(days=30)
+            end_date = datetime.datetime.today()
+            start_date = end_date - datetime.timedelta(days=30)
             daily_data = fetch_data(FNO_ASSETS, start_date, end_date)
             st.session_state.weekly_data.update(daily_data)
-            logging.info("Loaded daily_analysis.csv with {} stocks, analysis date: {}".format(len(df), analysis_date))
+            logging.info(f"Loaded daily_analysis.csv with {len(df)} stocks, analysis date: {analysis_date}")
     except Exception as e:
         st.error(f"Failed to load daily_analysis.csv: {e}. Running fresh analysis...")
         logging.error(f"Failed to load daily_analysis.csv: {e}")
         with st.spinner("Fetching market data for 50 stocks..."):
-            end_date = datetime.today()
-            start_date = end_date - timedelta(days=30)
+            end_date = datetime.datetime.today()
+            start_date = end_date - datetime.timedelta(days=30)
             daily_data = fetch_data(FNO_ASSETS, start_date, end_date)
             if not daily_data:
-                st.error("No data fetched. Check internet connection or ticker validity (e.g., ETERNAL.NS).")
+                st.error("No data fetched. Check internet connection or ticker validity.")
                 logging.error("No data fetched during fresh analysis")
             else:
                 df = pd.DataFrame({
@@ -410,21 +417,21 @@ if os.path.exists("daily_analysis.csv"):
                     "Profit Margin (%)": [round(daily_data[name]["profit_margin"] * 100, 2) if daily_data[name]["profit_margin"] else "N/A" for name in daily_data],
                     "Dividend Yield (%)": [round(daily_data[name]["dividend_yield"] * 100, 2) if daily_data[name]["dividend_yield"] else "N/A" for name in daily_data],
                     "OI Change (%)": [round(daily_data[name]["oi_change"], 2) if daily_data[name]["oi_change"] else "N/A" for name in daily_data],
-                    "Analysis Date": datetime.today().strftime("%Y-%m-%d")
+                    "Analysis Date": datetime.datetime.today().strftime("%Y-%m-%d")
                 })
                 df.to_csv("daily_analysis.csv", index=False)
-                logging.info("Generated new daily_analysis.csv with {} stocks".format(len(daily_data)))
-                st.subheader(f"Daily Analysis (All 50 F&O Stocks, Processed on {datetime.today().strftime('%Y-%m-%d')})")
+                logging.info(f"Generated new daily_analysis.csv with {len(daily_data)} stocks")
+                st.subheader(f"Daily Analysis (All 50 F&O Stocks, Processed on {datetime.datetime.today().strftime('%Y-%m-%d')})")
                 st.dataframe(df)
                 st.session_state.weekly_data.update(daily_data)
 else:
     st.subheader("Daily Analysis (All 50 F&O Stocks)")
     with st.spinner("Fetching market data for 50 stocks..."):
-        end_date = datetime.today()
-        start_date = end_date - timedelta(days=30)
+        end_date = datetime.datetime.today()
+        start_date = end_date - datetime.timedelta(days=30)
         daily_data = fetch_data(FNO_ASSETS, start_date, end_date)
         if not daily_data:
-            st.error("No data fetched. Check internet connection or ticker validity (e.g., ETERNAL.NS).")
+            st.error("No data fetched. Check internet connection or ticker validity.")
             logging.error("No data fetched during initial analysis")
         else:
             df = pd.DataFrame({
@@ -444,11 +451,11 @@ else:
                 "Profit Margin (%)": [round(daily_data[name]["profit_margin"] * 100, 2) if daily_data[name]["profit_margin"] else "N/A" for name in daily_data],
                 "Dividend Yield (%)": [round(daily_data[name]["dividend_yield"] * 100, 2) if daily_data[name]["dividend_yield"] else "N/A" for name in daily_data],
                 "OI Change (%)": [round(daily_data[name]["oi_change"], 2) if daily_data[name]["oi_change"] else "N/A" for name in daily_data],
-                "Analysis Date": datetime.today().strftime("%Y-%m-%d")
+                "Analysis Date": datetime.datetime.today().strftime("%Y-%m-%d")
             })
             df.to_csv("daily_analysis.csv", index=False)
-            logging.info("Generated initial daily_analysis.csv with {} stocks".format(len(daily_data)))
-            st.subheader(f"Daily Analysis (All 50 F&O Stocks, Processed on {datetime.today().strftime('%Y-%m-%d')})")
+            logging.info(f"Generated initial daily_analysis.csv with {len(daily_data)} stocks")
+            st.subheader(f"Daily Analysis (All 50 F&O Stocks, Processed on {datetime.datetime.today().strftime('%Y-%m-%d')})")
             st.dataframe(df)
             st.session_state.weekly_data.update(daily_data)
 
@@ -470,7 +477,7 @@ if os.path.exists("weekly_recommendations.json"):
             else:
                 st.write("No strong sell recommendation this week.")
             st.write("Invest ₹1250 in buy recommendations via SIP.")
-            logging.info("Displayed weekly recommendations for {}".format(recommendation['date']))
+            logging.info(f"Displayed weekly recommendations for {recommendation['date']}")
     except Exception as e:
         st.warning(f"Failed to load weekly_recommendations.json: {e}. Run manual analysis to generate new recommendations.")
         logging.error(f"Failed to load weekly_recommendations.json: {e}")
@@ -481,7 +488,7 @@ else:
 # Plot price trends (sample of 10 stocks)
 st.subheader("Price Trends (Sample of 10 Stocks, Last 30 Days)")
 sample_tickers = random.sample(FNO_ASSETS, min(10, len(FNO_ASSETS)))
-sample_data = fetch_data(sample_tickers, start_date, end_date)
+sample_data = fetch_data(sample_tickers, datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.today())
 fig, ax = plt.subplots()
 for name in sample_data:
     if not sample_data[name]["history"].empty:
@@ -490,14 +497,14 @@ ax.set_xlabel("Date")
 ax.set_ylabel("Price (₹)")
 ax.legend()
 st.pyplot(fig)
-logging.info("Displayed price trends for {} stocks".format(len(sample_data)))
+logging.info(f"Displayed price trends for {len(sample_data)} stocks")
 
 # Real-time buy/sell recommendations
 st.subheader("Real-Time Buy/Sell Recommendations")
 selected_assets = st.multiselect("Select Stocks for Real-Time Analysis", [asset["name"] for asset in FNO_ASSETS], default=[asset["name"] for asset in FNO_ASSETS[:3]])
 if selected_assets:
     with st.spinner("Fetching real-time data..."):
-        real_time_data = fetch_data([asset for asset in FNO_ASSETS if asset["name"] in selected_assets], start_date, end_date)
+        real_time_data = fetch_data([asset for asset in FNO_ASSETS if asset["name"] in selected_assets], datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.today())
         buy_scores = score_stock(real_time_data, action="buy")
         sell_scores = score_stock(real_time_data, action="sell")
         buy_recommendation = max(buy_scores, key=buy_scores.get, default=None) if buy_scores else None
@@ -512,16 +519,16 @@ if selected_assets:
             st.write(f"Price: ₹{real_time_data[sell_recommendation]['current_price']:.2f}, RSI: {real_time_data[sell_recommendation]['rsi']:.2f}, MACD: {real_time_data[sell_recommendation]['macd']:.2f}, ADX: {real_time_data[sell_recommendation]['adx']:.2f}, Momentum: {real_time_data[sell_recommendation]['momentum']:.2f}, Stochastic %K: {real_time_data[sell_recommendation]['slowk']:.2f}, P/E: {real_time_data[sell_recommendation]['pe_ratio']:.2f}")
         else:
             st.write("No strong sell recommendation at this time.")
-        logging.info("Generated real-time recommendations for {} stocks".format(len(selected_assets)))
+        logging.info(f"Generated real-time recommendations for {len(selected_assets)} stocks")
 
 # Portfolio management
 st.subheader("Your Portfolio")
 if st.button("Add Investment"):
-    portfolio_data = fetch_data([asset for asset in FNO_ASSETS if asset["name"] in selected_assets], start_date, end_date)
+    portfolio_data = fetch_data([asset for asset in FNO_ASSETS if asset["name"] in selected_assets], datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.today())
     for name in selected_assets:
         if name in portfolio_data and portfolio_data[name]["current_price"]:
             st.session_state.portfolio = update_portfolio(
-                st.session_state.portfolio, name, investment_amount, portfolio_data[name]["current_price"], end_date, action="buy"
+                st.session_state.portfolio, name, investment_amount, portfolio_data[name]["current_price"], datetime.datetime.today(), action="buy"
             )
             st.success(f"Added ₹{investment_amount} investment in {name}.")
             logging.info(f"Added ₹{investment_amount} investment in {name}")
@@ -533,12 +540,12 @@ if st.session_state.portfolio:
             "Shares": round(info["shares"], 4),
             "Total Invested (₹)": round(info["total_invested"], 2),
             "Realized P&L (₹)": round(info["realized_pnl"], 2),
-            "Current Value (₹)": round(info["shares"] * fetch_data([{"name": name, "symbol": next(a["symbol"] for a in FNO_ASSETS if a["name"] == name)}], start_date, end_date)[name]["current_price"], 2) if name in fetch_data([{"name": name, "symbol": next(a["symbol"] for a in FNO_ASSETS if a["name"] == name)}], start_date, end_date) else "N/A"
+            "Current Value (₹)": round(info["shares"] * fetch_data([{"name": name, "symbol": next(a["symbol"] for a in FNO_ASSETS if a["name"] == name)}], datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.today())[name]["current_price"], 2) if name in fetch_data([{"name": name, "symbol": next(a["symbol"] for a in FNO_ASSETS if a["name"] == name)}], datetime.datetime.today() - datetime.timedelta(days=30), datetime.datetime.today()) else "N/A"
         }
         for name, info in st.session_state.portfolio.items()
     ])
     st.dataframe(portfolio_df)
-    logging.info("Displayed portfolio with {} assets".format(len(st.session_state.portfolio)))
+    logging.info(f"Displayed portfolio with {len(st.session_state.portfolio)} assets")
 
 # Download data
 if 'df' in locals() and not df.empty:
